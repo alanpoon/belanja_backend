@@ -1,7 +1,7 @@
-use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, dispatch::Result, Parameter, ensure};
+use support::{decl_module, decl_storage, decl_event, StorageValue, EnumerableStorageMap, StorageMap, dispatch::Result, Parameter, ensure};
 use runtime_primitives::traits::{CheckedAdd, CheckedMul, As};
 use system::ensure_signed;
-
+use rstd::vec::Vec;
 pub trait Trait: cennzx_spot::Trait {
 	type Item: Parameter;
 	type ItemId: Parameter + CheckedAdd + Default + From<u8>;
@@ -15,10 +15,10 @@ pub type PriceOf<T> = (AssetIdOf<T>, BalanceOf<T>);
 decl_storage! {
 	trait Store for Module<T: Trait> as XPay {
 		pub Items get(item): map T::ItemId => Option<T::Item>;
-		pub ItemOwners get(item_owner): map T::ItemId => Option<T::AccountId>;
+		pub ItemOwners get(item_owner): map T::ItemId => Option<T::AccountId>; //insert(item_id.clone(), origin.clone())
+		pub DinerItemIds get(diner_items): linked_map u32 => Vec<T::ItemId>;
 		pub ItemQuantities get(item_quantity): map T::ItemId => u32;
 		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
-		
 		pub NextItemId get(next_item_id): T::ItemId;
 	}
 }
@@ -49,22 +49,21 @@ decl_module! {
 			Ok(())
 		}
 
-		pub fn add_item(origin, item_id: T::ItemId, quantity: u32) -> Result {
+		pub fn add_item(origin, item_id: T::ItemId, quantity: u32, diner:u32) -> Result {
 			let origin = ensure_signed(origin)?;
 
 			<ItemQuantities<T>>::mutate(item_id.clone(), |q| *q = q.saturating_add(quantity));
-
-			Self::deposit_event(RawEvent::ItemAdded(origin, item_id.clone(), Self::item_quantity(item_id)));
+			Self::insert_into_diner(diner,item_id.clone())?;
+			Self::deposit_event(RawEvent::ItemAdded(origin, item_id.clone(), Self::item_quantity(item_id),diner));
 
 			Ok(())
 		}
 
-		pub fn remove_item(origin, item_id: T::ItemId, quantity: u32) -> Result {
+		pub fn remove_item(origin, item_id: T::ItemId, quantity: u32, diner:u32) -> Result {
 			let origin = ensure_signed(origin)?;
-
 			<ItemQuantities<T>>::mutate(item_id.clone(), |q| *q = q.saturating_sub(quantity));
-
-			Self::deposit_event(RawEvent::ItemRemoved(origin, item_id.clone(), Self::item_quantity(item_id)));
+			Self::remove_from_diner(diner,item_id.clone())?;
+			Self::deposit_event(RawEvent::ItemRemoved(origin, item_id.clone(), Self::item_quantity(item_id),diner));
 
 			Ok(())
 		}
@@ -119,6 +118,46 @@ decl_module! {
 
 			Ok(())
 		}
+		
+	}
+}
+
+impl<T: Trait> Module<T> {
+	pub fn insert_into_diner(diner: u32,item_id:T::ItemId)->Result{
+		for (_diner,item_id_vec) in  <DinerItemIds<T>>::enumerate(){
+			for v in item_id_vec{
+				if v==item_id{
+					ensure!(false,"Item has an existing diner already");
+				}
+			}
+		}
+		if <DinerItemIds<T>>::exists(diner){
+			<DinerItemIds<T>>::mutate(diner, |q| q.push(item_id));
+		}else{
+			let mut v:Vec<T::ItemId> = Vec::new();
+			v.push(item_id);
+			<DinerItemIds<T>>::insert(diner,v);
+		}
+		Ok(())
+	}
+	pub fn remove_from_diner(diner:u32,item_id:T::ItemId)->Result{
+		let mut fail = false;
+		if <DinerItemIds<T>>::exists(diner){
+			<DinerItemIds<T>>::mutate(diner, |q| {
+				if let Some(index) = q.iter().position(|x| *x == item_id){
+					q.remove(index);
+				}else{
+					fail = true;
+				}
+				
+			});
+		}else{
+			ensure!(false,"Diner does not exist");
+		}
+		if fail{
+			ensure!(false,"Item does not exist in Diner");
+		}
+		Ok(())
 	}
 }
 
@@ -131,10 +170,10 @@ decl_event!(
 	{
 		/// New item created. (transactor, item_id, quantity, item, price)
 		ItemCreated(AccountId, ItemId, u32, Item, Price),
-		/// More items added. (transactor, item_id, new_quantity)
-		ItemAdded(AccountId, ItemId, u32),
-		/// Items removed. (transactor, item_id, new_quantity)
-		ItemRemoved(AccountId, ItemId, u32),
+		/// More items added. (transactor, item_id, new_quantity, diner)
+		ItemAdded(AccountId, ItemId, u32, u32),
+		/// Items removed. (transactor, item_id, new_quantity, diner)
+		ItemRemoved(AccountId, ItemId, u32, u32),
 		/// Item updated. (transactor, item_id, new_quantity, new_price)
 		ItemUpdated(AccountId, ItemId, u32, Price),
 		/// Item sold. (transactor, item_id, quantity)
