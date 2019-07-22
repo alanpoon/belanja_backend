@@ -16,7 +16,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as XPay {
 		pub Items get(item): map T::ItemId => Option<T::Item>;
 		pub ItemOwners get(item_owner): map T::ItemId => Option<T::AccountId>; //insert(item_id.clone(), origin.clone())
-		pub DinerItemIds get(diner_items): linked_map u32 => Vec<(T::ItemId,usize,bool)>;
+		pub DinerItemIds get(diner_items): linked_map u32 => Vec<(T::ItemId,usize,usize)>;
 		pub ItemQuantities get(item_quantity): map T::ItemId => u32;
 		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
 		pub NextItemId get(next_item_id): T::ItemId;
@@ -83,7 +83,7 @@ decl_module! {
 			Ok(())
 		}
 
-		pub fn purchase_item(origin, quantity: u32, item_id: T::ItemId, paying_asset_id: AssetIdOf<T>, max_total_paying_amount: BalanceOf<T>) -> Result {
+		pub fn purchase_item(origin, quantity: u32, item_id: T::ItemId, paying_asset_id: AssetIdOf<T>, max_total_paying_amount: BalanceOf<T>,diner:u32) -> Result {
 			let origin = ensure_signed(origin)?;
 
 			let new_quantity = Self::item_quantity(item_id.clone()).checked_sub(quantity).ok_or_else(||"Not enough quantity")?;
@@ -94,9 +94,8 @@ decl_module! {
 
 			if item_price.0 == paying_asset_id {
 				// Same asset, GA transfer
-
 				ensure!(total_price_amount <= max_total_paying_amount, "User paying price too low");
-
+				Self::purchase_for_diner(diner,item_id.clone())?;
 				<generic_asset::Module<T>>::make_transfer_with_event(&item_price.0, &origin, &seller, total_price_amount)?;
 			} else {
 				// Different asset, CENNZX-Spot transfer
@@ -126,26 +125,31 @@ impl<T: Trait> Module<T> {
 	pub fn insert_into_diner(diner: u32,item_id:T::ItemId)->Result{
 		if <DinerItemIds<T>>::exists(diner){
 			<DinerItemIds<T>>::mutate(diner,|q|{
-				for (v,count,_paid) in q.iter_mut(){
+				for (v,_,unpaid) in q.iter_mut(){
 					if *v ==item_id{
-						*count=count.clone()+1;
+						*unpaid=unpaid.clone()+1;
 					}
 				}
 			});
-			//<DinerItemIds<T>>::mutate(diner, |q| q.push(item_id));
 		}else{
-			let mut v:Vec<(T::ItemId,usize,bool)> = Vec::new();
-			v.push((item_id,1,false));
+			let mut v:Vec<(T::ItemId,usize,usize)> = Vec::new();
+			v.push((item_id,0,1));
 			<DinerItemIds<T>>::insert(diner,v);
 		}
 		Ok(())
 	}
 	pub fn remove_from_diner(diner:u32,item_id:T::ItemId)->Result{
 		let mut fail = false;
+		let mut fail_unpaid = false;
 		if <DinerItemIds<T>>::exists(diner){
 			<DinerItemIds<T>>::mutate(diner, |q| {
 				if let Some(index) = q.iter().position(|x| (*x).0 == item_id){
-					q.remove(index);
+					if let Some((_,_,unpaid)) = q.get_mut(index){
+						if *unpaid==0{
+							fail_unpaid = true;
+						}
+						*unpaid = unpaid.clone() -1;
+					}
 				}else{
 					fail = true;
 				}
@@ -156,6 +160,38 @@ impl<T: Trait> Module<T> {
 		}
 		if fail{
 			ensure!(false,"Item does not exist in Diner");
+		}
+		if fail_unpaid{
+			ensure!(false,"There is no unpaid item to remove");
+		}
+		Ok(())
+	}
+	pub fn purchase_for_diner(diner:u32,item_id:T::ItemId)->Result{
+		let mut fail = false;
+		let mut fail_unpaid = false;
+		if <DinerItemIds<T>>::exists(diner){
+			<DinerItemIds<T>>::mutate(diner, |q| {
+				if let Some(index) = q.iter().position(|x| (*x).0 == item_id){
+					if let Some((_,paid,unpaid)) = q.get_mut(index){
+						if *unpaid ==0{
+							fail_unpaid = true;
+						}
+						*paid = paid.clone()+1;
+						*unpaid = unpaid.clone() -1;
+					}
+				}else{
+					fail = true;
+				}
+				
+			});
+		}else{
+			ensure!(false,"Diner does not exist");
+		}
+		if fail{
+			ensure!(false,"Item does not exist in Diner");
+		}
+		if fail_unpaid{
+			ensure!(false,"There is no unpaid item to pay for");
 		}
 		Ok(())
 	}
