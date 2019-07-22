@@ -79,3 +79,7 @@ A [template module](runtime/src/template.rs) is provided which can be used as a 
 
 purge
 cargo run -- purge-chain --dev -y
+
+curl -H --verbose 'Content-Type: application/json' -d '{ "jsonrpc": "2.0", "method":"chain_getRuntimeVersion", "params":[], "id": 1 }' http://192.168.1.37:9933
+
+curl --verbose -H 'Content-Type: application/json' -d '{ "jsonrpc": "2.0", "method":"chain_getRuntimeVersion", "params":[], "id": 1 }' http://192.168.1.37:9933

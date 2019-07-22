@@ -16,7 +16,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as XPay {
 		pub Items get(item): map T::ItemId => Option<T::Item>;
 		pub ItemOwners get(item_owner): map T::ItemId => Option<T::AccountId>; //insert(item_id.clone(), origin.clone())
-		pub DinerItemIds get(diner_items): linked_map u32 => Vec<T::ItemId>;
+		pub DinerItemIds get(diner_items): linked_map u32 => Vec<(T::ItemId,usize,bool)>;
 		pub ItemQuantities get(item_quantity): map T::ItemId => u32;
 		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
 		pub NextItemId get(next_item_id): T::ItemId;
@@ -124,18 +124,18 @@ decl_module! {
 
 impl<T: Trait> Module<T> {
 	pub fn insert_into_diner(diner: u32,item_id:T::ItemId)->Result{
-		for (_diner,item_id_vec) in  <DinerItemIds<T>>::enumerate(){
-			for v in item_id_vec{
-				if v==item_id{
-					ensure!(false,"Item has an existing diner already");
-				}
-			}
-		}
 		if <DinerItemIds<T>>::exists(diner){
-			<DinerItemIds<T>>::mutate(diner, |q| q.push(item_id));
+			<DinerItemIds<T>>::mutate(diner,|q|{
+				for (v,count,_paid) in q.iter_mut(){
+					if *v ==item_id{
+						*count=count.clone()+1;
+					}
+				}
+			});
+			//<DinerItemIds<T>>::mutate(diner, |q| q.push(item_id));
 		}else{
-			let mut v:Vec<T::ItemId> = Vec::new();
-			v.push(item_id);
+			let mut v:Vec<(T::ItemId,usize,bool)> = Vec::new();
+			v.push((item_id,1,false));
 			<DinerItemIds<T>>::insert(diner,v);
 		}
 		Ok(())
@@ -144,7 +144,7 @@ impl<T: Trait> Module<T> {
 		let mut fail = false;
 		if <DinerItemIds<T>>::exists(diner){
 			<DinerItemIds<T>>::mutate(diner, |q| {
-				if let Some(index) = q.iter().position(|x| *x == item_id){
+				if let Some(index) = q.iter().position(|x| (*x).0 == item_id){
 					q.remove(index);
 				}else{
 					fail = true;
