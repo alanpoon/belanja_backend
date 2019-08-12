@@ -292,7 +292,10 @@ impl_runtime_apis! {
 		}
 
 		fn execute_block(block: Block) {
-			Executive::execute_block(block)
+			Executive::execute_block(block.clone());
+			let (header,extrinsic) = block.deconstruct();
+			println!("execute_block:: {:?}",header);
+			println!("execute_xx:: {:?}",extrinsic);
 		}
 
 		fn initialize_block(header: &<Block as BlockT>::Header) {

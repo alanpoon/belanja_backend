@@ -2,7 +2,7 @@ use support::{decl_module, decl_storage, decl_event, StorageValue, EnumerableSto
 use runtime_primitives::traits::{CheckedAdd, CheckedMul, As};
 use system::ensure_signed;
 use rstd::vec::Vec;
-pub trait Trait: cennzx_spot::Trait {
+pub trait Trait: cennzx_spot::Trait +timestamp::Trait {
 	type Item: Parameter;
 	type ItemId: Parameter + CheckedAdd + Default + From<u8>;
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
@@ -26,7 +26,11 @@ decl_storage! {
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		fn deposit_event<T>() = default;
-
+		pub fn get_time(origin) -> Result {
+			let _sender = ensure_signed(origin)?;
+			let _now = <timestamp::Module<T>>::get();
+			Ok(())
+		}
 		pub fn create_item(origin, quantity: u32, item: T::Item, price_asset_id: AssetIdOf<T>, price_amount: BalanceOf<T>) -> Result {
 			let origin = ensure_signed(origin)?;
 
