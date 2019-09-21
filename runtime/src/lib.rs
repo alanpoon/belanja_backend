@@ -233,6 +233,8 @@ impl fees::Trait for Runtime {
 impl cennzx_spot::Trait for Runtime {
 	type Call = Call;
 	type Event = Event;
+	type BalanceToU128 = Balance;
+	type U128ToBalance = Balance;
 	type ExchangeAddressGenerator = ExchangeAddressGenerator<Self>;
 }
 
