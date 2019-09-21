@@ -7,7 +7,7 @@
 
 pub use cennznet_primitives::{
 	AccountId, AccountIndex, AuthorityId, AuthoritySignature, Balance, BlockNumber, CennznetExtrinsic, Hash, Index,
-	Signature,
+	Signature
 };
 
 #[cfg(feature = "std")]
@@ -43,8 +43,8 @@ pub use generic_asset;
 
 mod fee;
 
-mod xpay;
-
+pub mod xpay;
+pub mod xpay_floorplan;
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
 /// of data like extrinsics, allowing for them to continue syncing the network through upgrades
@@ -140,6 +140,7 @@ impl system::Trait for Runtime {
 	/// The ubiquitous origin type.
 	type Origin = Origin;
 	type Signature = Signature;
+	
 }
 
 impl aura::Trait for Runtime {

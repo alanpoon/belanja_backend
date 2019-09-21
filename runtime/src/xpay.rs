@@ -1,7 +1,10 @@
-use support::{decl_module, decl_storage, decl_event, StorageValue, EnumerableStorageMap, StorageMap, dispatch::Result, Parameter, ensure};
+use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, dispatch::Result, Parameter, ensure};
 use runtime_primitives::traits::{CheckedAdd, CheckedMul, As};
 use system::ensure_signed;
+
 use rstd::vec::Vec;
+use super::xpay_floorplan;
+
 pub trait Trait: cennzx_spot::Trait {
 	type Item: Parameter;
 	type ItemId: Parameter + CheckedAdd + Default + From<u8>;
@@ -20,6 +23,10 @@ decl_storage! {
 		pub ItemQuantities get(item_quantity): map T::ItemId => u32;
 		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
 		pub NextItemId get(next_item_id): T::ItemId;
+		pub Floorplans get(floorplan): map T::ItemId =>Option<(Vec<u8>,Vec<u8>,Vec<u8>,Vec<(usize,i16,i16,i16)>)>; //image,description
+		pub FloorplanOwners get(floorplan_owner): map T::ItemId=> Option<T::AccountId>;
+		pub FloorplanNextItemId get(floorplan_next_item_id): T::ItemId;
+		//pub Floorplan get(floorplanold): linked_map T::AccountId => Vec<(Vec<u8>,Vec<(usize,i16,i16,i16)>)>;
 	}
 }
 
@@ -117,7 +124,22 @@ decl_module! {
 
 			Ok(())
 		}
-		
+		pub fn add_floorplan(origin,acc_to_edit:T::AccountId,image:Vec<u8>,description:Vec<u8>,ipfs:Vec<u8>,floorplan:Vec<(usize,i16,i16,i16)>)->Result{
+			let origin = ensure_signed(origin)?;
+			ensure!(origin == acc_to_edit, "No permission to add floorplan for other account");
+			let item_id = Self::floorplan_next_item_id();
+			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,image,description,ipfs,floorplan)
+		}
+		pub fn remove_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId)->Result{
+			let origin = ensure_signed(origin)?;
+			ensure!(origin == acc_to_edit, "No permission to remove floorplan for other account");
+			xpay_floorplan::remove_floorplan::<T>(item_id)
+		}
+		pub fn change_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId,image:Vec<u8>,description:Vec<u8>,ipfs:Vec<u8>,floorplan:Vec<(usize,i16,i16,i16)>)->Result{
+			let origin = ensure_signed(origin)?;
+			ensure!(origin == acc_to_edit, "No permission to change floorplan for other account");
+			xpay_floorplan::change_floorplan::<T>(item_id,image,description,ipfs,floorplan)
+		}
 	}
 }
 
