@@ -1,7 +1,7 @@
 use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, dispatch::Result, Parameter, ensure};
 use runtime_primitives::traits::{CheckedAdd, CheckedMul, As};
 use system::ensure_signed;
-
+use parity_codec::{Encode, Decode};
 use rstd::vec::Vec;
 use super::xpay_floorplan;
 
@@ -10,7 +10,27 @@ pub trait Trait: cennzx_spot::Trait {
 	type ItemId: Parameter + CheckedAdd + Default + From<u8>;
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
-
+#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Claim {
+    desc: Vec<u8>,
+		desc1: Vec<u8>
+}
+#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Floorplan {
+    image: Vec<u8>,
+		description: Vec<u8>,
+		ipfs: Vec<u8>,
+		cubes: Vec<(usize,i16,i16,i16)> 
+}
+impl Floorplan{
+	pub fn new(image:Vec<u8>,description:Vec<u8>,ipfs:Vec<u8>,cubes:Vec<(usize,i16,i16,i16)>)->Floorplan{
+		Floorplan{
+			image,description,ipfs,cubes
+		}
+	}
+}
 pub type BalanceOf<T> = <T as generic_asset::Trait>::Balance;
 pub type AssetIdOf<T> = <T as generic_asset::Trait>::AssetId;
 pub type PriceOf<T> = (AssetIdOf<T>, BalanceOf<T>);
@@ -23,9 +43,12 @@ decl_storage! {
 		pub ItemQuantities get(item_quantity): map T::ItemId => u32;
 		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
 		pub NextItemId get(next_item_id): T::ItemId;
-		pub Floorplans get(floorplan): map T::ItemId =>Option<(Vec<u8>,Vec<u8>,Vec<u8>,Vec<(usize,i16,i16,i16)>)>; //image,description
+		pub Floorplans get(floorplan): map T::ItemId =>Option<Floorplan>; //image,description
 		pub FloorplanOwners get(floorplan_owner): map T::ItemId=> Option<T::AccountId>;
 		pub FloorplanNextItemId get(floorplan_next_item_id): T::ItemId;
+		pub Claims get(claim): map T::ItemId =>Option<u32>;
+		pub ClaimNextItemId get(claim_next_item_id): T::ItemId;
+		pub Msgs get(msg): map T::ItemId=>Option<Claim>;
 		//pub Floorplan get(floorplanold): linked_map T::AccountId => Vec<(Vec<u8>,Vec<(usize,i16,i16,i16)>)>;
 	}
 }
@@ -33,7 +56,12 @@ decl_storage! {
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		fn deposit_event<T>() = default;
-
+		pub fn add_msg(origin,msg:Vec<u8>,msg2:Vec<u8>)->Result{
+			let item_id = Self::next_item_id();
+			<Msgs<T>>::insert(item_id.clone(),Claim{desc:msg,desc1:msg2});
+			Self::deposit_event(RawEvent::CreatedClaim);
+			Ok(())
+		}
 		pub fn create_item(origin, quantity: u32, item: T::Item, price_asset_id: AssetIdOf<T>, price_amount: BalanceOf<T>) -> Result {
 			let origin = ensure_signed(origin)?;
 
@@ -140,6 +168,20 @@ decl_module! {
 			ensure!(origin == acc_to_edit, "No permission to change floorplan for other account");
 			xpay_floorplan::change_floorplan::<T>(item_id,image,description,ipfs,floorplan)
 		}
+		pub fn add_claims(origin, claim:u32) -> Result {
+
+			//let origin = ensure_signed(origin)?;
+			//let item_id = Self::claim_next_item_id();
+			
+			// The last available id serves as the overflow mark and won't be used.
+			//let next_item_id = item_id.checked_add(&1.into()).ok_or_else(||"No new item id is available.")?;
+
+			//<ClaimNextItemId<T>>::put(next_item_id);
+			//<Claims<T>>::insert(item_id.clone(), Claim{desc:claim});
+			Self::deposit_event(RawEvent::CreatedClaim);
+			Ok(())
+		}
+		
 	}
 }
 
@@ -236,5 +278,6 @@ decl_event!(
 		ItemUpdated(AccountId, ItemId, u32, Price),
 		/// Item sold. (transactor, item_id, quantity)
 		ItemSold(AccountId, ItemId, u32),
+		CreatedClaim,
 	}
 );
