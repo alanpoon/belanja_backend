@@ -18,16 +18,24 @@ pub struct Claim {
 }
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
+pub struct Item {
+		image: Vec<u8>,
+    desc: Vec<u8>,
+		ipfs: Vec<u8>
+}
+
+#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Debug))]
 pub struct Floorplan {
     image: Vec<u8>,
-		description: Vec<u8>,
+		desc: Vec<u8>,
 		ipfs: Vec<u8>,
 		cubes: Vec<(usize,i16,i16,i16)> 
 }
 impl Floorplan{
-	pub fn new(image:Vec<u8>,description:Vec<u8>,ipfs:Vec<u8>,cubes:Vec<(usize,i16,i16,i16)>)->Floorplan{
+	pub fn new(image:Vec<u8>,desc:Vec<u8>,ipfs:Vec<u8>,cubes:Vec<(usize,i16,i16,i16)>)->Floorplan{
 		Floorplan{
-			image,description,ipfs,cubes
+			image,desc,ipfs,cubes
 		}
 	}
 }
@@ -37,14 +45,13 @@ pub type PriceOf<T> = (AssetIdOf<T>, BalanceOf<T>);
 
 decl_storage! {
 	trait Store for Module<T: Trait> as XPay {
-		pub Items get(item): map T::ItemId => Option<T::Item>;
-		pub ItemOwners get(item_owner): map T::ItemId => Option<T::AccountId>; //insert(item_id.clone(), origin.clone())
-		pub DinerItemIds get(diner_items): linked_map u32 => Vec<(T::ItemId,usize,usize)>;
-		pub ItemQuantities get(item_quantity): map T::ItemId => u32;
-		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
+		pub Items get(item): map T::ItemId => Option<Item>;
 		pub NextItemId get(next_item_id): T::ItemId;
-		pub Floorplans get(floorplan): map T::ItemId =>Option<Floorplan>; //image,description
-		pub FloorplanOwners get(floorplan_owner): map T::ItemId=> Option<T::AccountId>;
+		pub OwnerItemIds get(owner_itemids): map T::AccountId => Vec<T::ItemId>;
+		pub DinerItemIds get(diner_items): linked_map u32 => Vec<(T::ItemId,usize,usize)>;
+		pub ItemPrices get(item_price): map T::ItemId => Option<PriceOf<T>>;
+		pub Floorplans get(floorplan): map T::ItemId =>Option<Floorplan>; //image,desc
+		pub OwnerFloormapIds get(owner_floormap_ids): map T::AccountId => Vec<T::ItemId>;
 		pub FloorplanNextItemId get(floorplan_next_item_id): T::ItemId;
 		pub Claims get(claim): map T::ItemId =>Option<u32>;
 		pub ClaimNextItemId get(claim_next_item_id): T::ItemId;
@@ -62,24 +69,32 @@ decl_module! {
 			Self::deposit_event(RawEvent::CreatedClaim);
 			Ok(())
 		}
-		pub fn create_item(origin, quantity: u32, item: T::Item, price_asset_id: AssetIdOf<T>, price_amount: BalanceOf<T>) -> Result {
+		pub fn create_item(origin, image:Vec<u8>,desc:Vec<u8>,ipfs:Vec<u8>,price_asset_id: AssetIdOf<T>,price_amount: BalanceOf<T>) -> Result {
 			let origin = ensure_signed(origin)?;
 
 			let item_id = Self::next_item_id();
-
+			let item = Item{
+				image,desc,ipfs
+			};
 			// The last available id serves as the overflow mark and won't be used.
 			let next_item_id = item_id.checked_add(&1.into()).ok_or_else(||"No new item id is available.")?;
 
 			<NextItemId<T>>::put(next_item_id);
-
 			let price = (price_asset_id, price_amount);
 
 			<Items<T>>::insert(item_id.clone(), item.clone());
-			<ItemOwners<T>>::insert(item_id.clone(), origin.clone());
-			<ItemQuantities<T>>::insert(item_id.clone(), quantity);
+			if <OwnerItemIds<T>>::exists(origin.clone()){
+				<OwnerItemIds<T>>::mutate(origin.clone(), |q| {
+					q.push(item_id.clone());
+				});
+			}else{
+				let mut v:Vec<T::ItemId> = Vec::new();
+				v.push(item_id.clone());
+				<OwnerItemIds<T>>::insert(origin.clone(),v);
+			}
 			<ItemPrices<T>>::insert(item_id.clone(), price.clone());
 
-			Self::deposit_event(RawEvent::ItemCreated(origin, item_id, quantity, item, price));
+			Self::deposit_event(RawEvent::ItemCreated(origin, item_id, price));
 
 			Ok(())
 		}
@@ -87,44 +102,41 @@ decl_module! {
 		pub fn add_item(origin, item_id: T::ItemId, quantity: u32, diner:u32) -> Result {
 			let origin = ensure_signed(origin)?;
 
-			<ItemQuantities<T>>::mutate(item_id.clone(), |q| *q = q.saturating_add(quantity));
 			Self::insert_into_diner(diner,item_id.clone())?;
-			Self::deposit_event(RawEvent::ItemAdded(origin, item_id.clone(), Self::item_quantity(item_id),diner));
+			Self::deposit_event(RawEvent::ItemAdded(origin, item_id.clone(), diner));
 
 			Ok(())
 		}
 
 		pub fn remove_item(origin, item_id: T::ItemId, quantity: u32, diner:u32) -> Result {
 			let origin = ensure_signed(origin)?;
-			<ItemQuantities<T>>::mutate(item_id.clone(), |q| *q = q.saturating_sub(quantity));
 			Self::remove_from_diner(diner,item_id.clone())?;
-			Self::deposit_event(RawEvent::ItemRemoved(origin, item_id.clone(), Self::item_quantity(item_id),diner));
+			Self::deposit_event(RawEvent::ItemRemoved(origin, item_id.clone(), diner));
 
 			Ok(())
 		}
 
-		pub fn update_item(origin, item_id: T::ItemId, quantity: u32, price_asset_id: AssetIdOf<T>, price_amount: BalanceOf<T>) -> Result {
+		pub fn update_item(origin, item_id: T::ItemId, image:Vec<u8>,desc:Vec<u8>,ipfs:Vec<u8>,price_asset_id:AssetIdOf<T>, price_amount: BalanceOf<T>) -> Result {
 			let origin = ensure_signed(origin)?;
 
 			ensure!(<Items<T>>::exists(item_id.clone()), "Item did not exist");
-
-			<ItemQuantities<T>>::insert(item_id.clone(), quantity);
-
 			let price = (price_asset_id, price_amount);
+			let item = Item{
+				image,desc,ipfs
+			};
+			<Items<T>>::insert(item_id.clone(),item);
 			<ItemPrices<T>>::insert(item_id.clone(), price.clone());
 
-			Self::deposit_event(RawEvent::ItemUpdated(origin, item_id, quantity, price));
+			Self::deposit_event(RawEvent::ItemUpdated(origin, item_id, price));
 
 			Ok(())
 		}
 
-		pub fn purchase_item(origin, quantity: u32, item_id: T::ItemId, paying_asset_id: AssetIdOf<T>, max_total_paying_amount: BalanceOf<T>,diner:u32) -> Result {
+		pub fn purchase_item(origin,seller:T::AccountId, quantity: u32, item_id: T::ItemId, paying_asset_id: AssetIdOf<T>, max_total_paying_amount: BalanceOf<T>,diner:u32) -> Result {
 			let origin = ensure_signed(origin)?;
-
-			let new_quantity = Self::item_quantity(item_id.clone()).checked_sub(quantity).ok_or_else(||"Not enough quantity")?;
 			let item_price = Self::item_price(item_id.clone()).ok_or_else(||"No item price")?;
-			let seller = Self::item_owner(item_id.clone()).ok_or_else(||"No item owner")?;
-
+			let seller_items = <OwnerItemIds<T>>::get(seller.clone());
+			seller_items.iter().position(|r| r == &item_id.clone()).ok_or_else(||"Seller has no such item")?;
 			let total_price_amount = item_price.1.checked_mul(&As::sa(quantity as u64)).ok_or_else(||"Total price overflow")?;
 
 			if item_price.0 == paying_asset_id {
@@ -146,27 +158,25 @@ decl_module! {
 				)?;
 			}
 
-			<ItemQuantities<T>>::insert(item_id.clone(), new_quantity);
-
 			Self::deposit_event(RawEvent::ItemSold(origin, item_id, quantity));
 
 			Ok(())
 		}
-		pub fn add_floorplan(origin,acc_to_edit:T::AccountId,image:Vec<u8>,description:Vec<u8>,ipfs:Vec<u8>,floorplan:Vec<(usize,i16,i16,i16)>)->Result{
+		pub fn add_floorplan(origin,acc_to_edit:T::AccountId,image:Vec<u8>,desc:Vec<u8>,ipfs:Vec<u8>,floorplan:Vec<(usize,i16,i16,i16)>)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to add floorplan for other account");
 			let item_id = Self::floorplan_next_item_id();
-			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,image,description,ipfs,floorplan)
+			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,image,desc,ipfs,floorplan)
 		}
 		pub fn remove_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to remove floorplan for other account");
 			xpay_floorplan::remove_floorplan::<T>(item_id)
 		}
-		pub fn change_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId,image:Vec<u8>,description:Vec<u8>,ipfs:Vec<u8>,floorplan:Vec<(usize,i16,i16,i16)>)->Result{
+		pub fn change_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId,image:Vec<u8>,desc:Vec<u8>,ipfs:Vec<u8>,floorplan:Vec<(usize,i16,i16,i16)>)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to change floorplan for other account");
-			xpay_floorplan::change_floorplan::<T>(item_id,image,description,ipfs,floorplan)
+			xpay_floorplan::change_floorplan::<T>(item_id,image,desc,ipfs,floorplan)
 		}
 		pub fn add_claims(origin, claim:u32) -> Result {
 
@@ -264,18 +274,17 @@ impl<T: Trait> Module<T> {
 decl_event!(
 	pub enum Event<T> where
 		<T as system::Trait>::AccountId,
-		<T as Trait>::Item,
 		<T as Trait>::ItemId,
 		Price = PriceOf<T>,
 	{
 		/// New item created. (transactor, item_id, quantity, item, price)
-		ItemCreated(AccountId, ItemId, u32, Item, Price),
+		ItemCreated(AccountId, ItemId, Price),
 		/// More items added. (transactor, item_id, new_quantity, diner)
-		ItemAdded(AccountId, ItemId, u32, u32),
+		ItemAdded(AccountId, ItemId, u32),
 		/// Items removed. (transactor, item_id, new_quantity, diner)
-		ItemRemoved(AccountId, ItemId, u32, u32),
+		ItemRemoved(AccountId, ItemId, u32),
 		/// Item updated. (transactor, item_id, new_quantity, new_price)
-		ItemUpdated(AccountId, ItemId, u32, Price),
+		ItemUpdated(AccountId, ItemId, Price),
 		/// Item sold. (transactor, item_id, quantity)
 		ItemSold(AccountId, ItemId, u32),
 		CreatedClaim,

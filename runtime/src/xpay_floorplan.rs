@@ -8,7 +8,16 @@ pub fn add_floorplan<T:Trait>(origin: T::AccountId,item_id:T::ItemId,image:Vec<u
 	<xpay::FloorplanNextItemId<T>>::put(next_item_id);
   let fp = xpay::Floorplan::new(image,description,ipfs,floorplan);
 	<xpay::Floorplans<T>>::insert(item_id.clone(), fp.clone());
-	<xpay::FloorplanOwners<T>>::insert(item_id, origin);
+  if <xpay::OwnerFloormapIds<T>>::exists(origin.clone()){
+    <xpay::OwnerFloormapIds<T>>::mutate(origin.clone(), |q| {
+      q.push(item_id);
+    });
+  }else{
+    let mut v:Vec<T::ItemId> = Vec::new();
+    v.push(item_id);
+    <xpay::OwnerFloormapIds<T>>::insert(origin,v);
+  }
+
   Ok(())
 }
 pub fn remove_floorplan<T:Trait>(item_id:T::ItemId)->Result{
