@@ -21,8 +21,13 @@ pub fn add_floorplan<T:Trait>(origin: T::AccountId,item_id:T::ItemId,cubes:Vec<(
 
   Ok(())
 }
-pub fn remove_floorplan<T:Trait>(item_id:T::ItemId)->Result{
+pub fn remove_floorplan<T:Trait>(origin: T::AccountId,item_id:T::ItemId)->Result{
   <xpay::Floorplans<T>>::remove(item_id);
+  if <xpay::OwnerFloormapIds<T>>::exists(origin.clone()){
+    <xpay::OwnerFloormapIds<T>>::mutate(origin.clone(), |q| {
+      *q = vec![];
+    });
+  }
   Ok(())
 }
 

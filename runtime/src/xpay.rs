@@ -149,12 +149,12 @@ decl_module! {
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to add floorplan for other account");
 			let item_id = Self::floorplan_next_item_id();
-			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,cubes,desc,ipfs,image)
+			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,cubes,desc,image,ipfs)
 		}
 		pub fn remove_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to remove floorplan for other account");
-			xpay_floorplan::remove_floorplan::<T>(item_id)
+			xpay_floorplan::remove_floorplan::<T>(origin,item_id)
 		}
 		pub fn change_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId,cubes:Vec<(usize,i16,i16,i16)>,desc:Vec<u8>,image:Vec<u8>,ipfs:Vec<u8>)->Result{
 			let origin = ensure_signed(origin)?;
