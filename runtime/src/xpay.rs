@@ -5,7 +5,7 @@ use parity_codec::{Encode, Decode};
 use rstd::vec::Vec;
 use super::xpay_floorplan;
 use super::xpay_diner;
-
+use super::xpay_profile;
 pub trait Trait: cennzx_spot::Trait {
 	type Item: Parameter;
 	type ItemId: Parameter + CheckedAdd + Default + From<u8>;
@@ -23,11 +23,18 @@ pub struct Item {
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Floorplan {
+	pub address: Vec<u8>,
 	pub	cubes: Vec<(usize,i16,i16,i16)>, 
 	pub	desc: Vec<u8>,
 	pub	image: Vec<u8>,
 	pub	ipfs: Vec<u8>
-    
+}
+#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Profile {
+	pub	profile_name: Vec<u8>,
+	pub	image: Vec<u8>,
+	pub	ipfs: Vec<u8>
 }
 
 pub type BalanceOf<T> = <T as generic_asset::Trait>::Balance;
@@ -44,6 +51,8 @@ decl_storage! {
 		pub Floorplans get(floorplan): map T::ItemId =>Option<Floorplan>; //image,desc
 		pub OwnerFloormapIds get(owner_floormap_ids): map T::AccountId => Vec<T::ItemId>;
 		pub FloorplanNextItemId get(floorplan_next_item_id): T::ItemId;
+		pub Profiles get(profile): map T::AccountId =>Option<Profile>;
+		
 		//pub Floorplan get(floorplanold): linked_map T::AccountId => Vec<(Vec<u8>,Vec<(usize,i16,i16,i16)>)>;
 	}
 }
@@ -145,23 +154,32 @@ decl_module! {
 
 			Ok(())
 		}
-		pub fn add_floorplan(origin,acc_to_edit:T::AccountId,cubes:Vec<(usize,i16,i16,i16)>,desc:Vec<u8>,image:Vec<u8>,ipfs:Vec<u8>)->Result{
+		pub fn add_floorplan(origin,acc_to_edit:T::AccountId,address:Vec<u8>,cubes:Vec<(usize,i16,i16,i16)>,desc:Vec<u8>,image:Vec<u8>,ipfs:Vec<u8>)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to add floorplan for other account");
 			let item_id = Self::floorplan_next_item_id();
-			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,cubes,desc,image,ipfs)
+			xpay_floorplan::add_floorplan::<T>(acc_to_edit,item_id,address,cubes,desc,image,ipfs)
 		}
 		pub fn remove_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to remove floorplan for other account");
 			xpay_floorplan::remove_floorplan::<T>(origin,item_id)
 		}
-		pub fn change_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId,cubes:Vec<(usize,i16,i16,i16)>,desc:Vec<u8>,image:Vec<u8>,ipfs:Vec<u8>)->Result{
+		pub fn change_floorplan(origin,acc_to_edit:T::AccountId,item_id:T::ItemId,address:Vec<u8>,cubes:Vec<(usize,i16,i16,i16)>,desc:Vec<u8>,image:Vec<u8>,ipfs:Vec<u8>)->Result{
 			let origin = ensure_signed(origin)?;
 			ensure!(origin == acc_to_edit, "No permission to change floorplan for other account");
-			xpay_floorplan::change_floorplan::<T>(item_id,cubes,desc,image,ipfs)
+			xpay_floorplan::change_floorplan::<T>(item_id,address,cubes,desc,image,ipfs)
 		}
-		
+		pub fn save_profile(origin,acc_to_edit:T::AccountId,profile_name:Vec<u8>,image:Vec<u8>,ipfs:Vec<u8>)->Result{
+			let origin = ensure_signed(origin)?;
+			ensure!(origin == acc_to_edit, "No permission to save profile for other account");
+			xpay_profile::save_profile::<T>(acc_to_edit,profile_name,image,ipfs)
+		}
+		pub fn remove_profile(origin,acc_to_edit:T::AccountId)->Result{
+			let origin = ensure_signed(origin)?;
+			ensure!(origin == acc_to_edit, "No permission to remove profile for other account");
+			xpay_profile::remove_profile::<T>(acc_to_edit)
+		}
 	}
 }
 
