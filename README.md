@@ -1,4 +1,6 @@
 # Belanja Server
+![alt text](https://raw.githubusercontent.com/alanpoon/xpay-runtime-tutorial/master/belanja.png)
+
 A resturant treat giving application built using blockchain. Consumer can identify the table he/she would like to pay for using cyclinder-shaped panorama of the resturant's interior. This is cyclinder-shaped panorama is also called (floorplan) in the source code.
 
 All images are stored in IPFS and it's hash and ipfs address are stored. Most function agruments are alphabetically ordered.
